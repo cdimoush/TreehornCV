@@ -1,3 +1,5 @@
 # Ignore the _video directory
 _video/
-
+.vscode/
+build/
+__pycache__/
