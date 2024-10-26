@@ -127,7 +127,7 @@ class WaveGUI:
             pass
 
         # Schedule the next queue check
-        self.root.after(10, self.check_queue)
+        self.root.after(100, self.check_queue)
 
     def update_data_from_queue(self, data):
         self.t_vals.append(time.time() - self.start_time_s)
