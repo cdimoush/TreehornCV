@@ -1,17 +1,13 @@
 {
-    "name": "TreehornCV DevContainer",
-    "build": {
-      "dockerfile": "Dockerfile",
-      "context": ".."
-    },
-    "settings": {
+  "name": "TreehornCV DevContainer",
+  "image": "treehorn:backup",  // Use your local image
+  "settings": {
       "terminal.integrated.shell.linux": "/bin/bash"
-    },
-    "extensions": [
+  },
+  "extensions": [
       "ms-python.python",
       "ms-vscode.cpptools"
-    ],
-    "forwardPorts": [],
-    "remoteUser": "root"
+  ],
+  "forwardPorts": [],
+  "remoteUser": "root"
 }
-  
