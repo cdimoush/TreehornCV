@@ -5,14 +5,34 @@
 
 OptiVibe::OptiVibe()
 {
-    track_len = 5;
-    detect_interval = 5;
-    frame_idx = 0;
-    next_id = 0;
+    /*
+    OptiVibe:
+    - Class tracks motion (y-displacement) between frames and computes a vibe signal
+    - The vibe signal is determined by evaluating a set of trackers in a rolling buffer
+
+    Primary parameters:
+    - displacement_threshold_percentage: Percentage of frame height that a tracker's displacement must exceed to be considered significant
+    - speed: Amount that the vibe signal changes between frames. 1.0 is the maximum change
+    - signal_threshold: The avg value of trackers must exceed this value (positive or negative) to update the vibe signal
+
+    Secondary parameters:
+    - track_len: Number of frames to track a feature
+    - detect_interval: Number of frames between feature detection refreshes
+    */
+
+    // Primary parameters
     displacement_threshold_percentage = 0.01;
-    signal = 0.0;
     speed = 0.1;
     signal_threshold = 0.2;
+
+    // Secondary parameters
+    track_len = 5;
+    detect_interval = 5;
+
+    // State variables
+    next_id = 0;
+    frame_idx = 0;
+    signal = 0.0;
     last_time = 0.0;
 }
 
