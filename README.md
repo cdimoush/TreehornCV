@@ -1,6 +1,6 @@
-Demo computer vision project. Using OpenCV to determine the location of a person in a video. 
+# TreehornCV
+Computer vision project using Lucas-Kanade optical flow to track motion in video
 
+## OptiVibe Demo
+Detect vertical motion and use it to control hardware with a 1D signal.
 
-$ source ~/.bashrc && cd ~/Home/Projects/TreehornCV && conda activate treehorn
-
-"C:\Users\Conner\anaconda3\envs\treehorn\python.exe" app.py
