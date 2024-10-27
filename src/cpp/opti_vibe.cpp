@@ -38,7 +38,7 @@ void OptiVibe::process_frame_debug(const cv::Mat& frame, double time, vibe_callb
 
 std::pair<cv::Mat, double> OptiVibe::compute_vibe_signal(const cv::Mat& frame, double time, bool debug)
 {
-    cv::Mat frame_gray = convert_to_grayscale(frame, false, true);
+    cv::Mat frame_gray = convert_to_grayscale(frame, true, true);
     cv::Mat processed_frame;
 
     if (!prev_gray.empty() && tracks_exist())
@@ -233,7 +233,7 @@ bool OptiVibe::should_detect_new_features()
 
 void OptiVibe::detect_new_features(const cv::Mat& frame_gray)
 {
-    int maxCorners = 100;
+    int maxCorners = 200;
     double qualityLevel = 0.05;
     double minDistance = 14;
     int blockSize = 14;
@@ -343,12 +343,31 @@ void OptiVibe::annotate_frame_with_signal(cv::Mat& vis)
     int height = vis.rows;
     int width = vis.cols;
 
-    int bar_width = 20;
+    int bar_width = 100; 
     int bar_height = static_cast<int>(height * signal);
 
-    cv::Point top_left(width - bar_width - 10, height - bar_height);
-    cv::Point bottom_right(width - 10, height);
+    // Adjust offsets for the bar
+    int bar_offset_x = 20; // Offset from the right side
+    int bar_offset_y = 20; // Offset from the bottom
+
+    cv::Point top_left(width - bar_width - bar_offset_x, height - bar_height - bar_offset_y);
+    cv::Point bottom_right(width - bar_offset_x, height - bar_offset_y);
 
     // Draw the bar
     cv::rectangle(vis, top_left, bottom_right, cv::Scalar(0, 0, 255), -1);
+
+    // Add tick marks and labels
+    int tick_height = 2;
+    int tick_positions[] = {height - bar_offset_y, static_cast<int>(height * 0.75) - bar_offset_y, static_cast<int>(height * 0.5) - bar_offset_y, static_cast<int>(height * 0.25) - bar_offset_y, 0 - bar_offset_y};
+    std::string tick_labels[] = {"0%", "25%", "50%", "75%", "100%"};
+
+    for (int i = 0; i < 5; ++i)
+    {
+        int y_pos = tick_positions[i];
+        cv::line(vis, cv::Point(width - bar_width - bar_offset_x - 5, y_pos), cv::Point(width - bar_offset_x + 5, y_pos), cv::Scalar(255, 255, 255), tick_height * 2);
+        cv::putText(vis, tick_labels[i], cv::Point(width - bar_width - bar_offset_x - 100, y_pos + 5), cv::FONT_HERSHEY_COMPLEX_SMALL, 1.5, cv::Scalar(255, 255, 255), 1);
+    }
+
+    // Add label for the bar
+    cv::putText(vis, "Vibe", cv::Point(width - bar_width - bar_offset_x - 50, height - bar_height - bar_offset_y - 10), cv::FONT_HERSHEY_COMPLEX, 1.5, cv::Scalar(255, 255, 255), 2);
 }

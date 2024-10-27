@@ -13,8 +13,14 @@ int main(int argc, char** argv) {
     std::string video_src;
     std::string output_path;
 
-    video_src = "/workspaces/TreehornCV/_video/ride_the_d.mp4";
-    output_path = "/workspaces/TreehornCV/_video/output.avi";
+    if (argc > 1) {
+        video_src = "/workspaces/TreehornCV/_video/" + std::string(argv[1]);
+        output_path = "/workspaces/TreehornCV/_video/processed_" + std::string(argv[1]);
+    } else {
+        std::cerr << "Error: No input file provided." << std::endl;
+        return -1;
+    }
+
 
     cv::VideoCapture cap;
 

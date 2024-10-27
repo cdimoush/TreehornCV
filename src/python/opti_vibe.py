@@ -21,7 +21,7 @@ class OptiVibe:
         self.last_time = time
         vibe_callback(vibe_signal)
 
-    def process_frame_debug(self, frame, time, vibe_callback, debug_callback):
+    def process_frame_debug(self, frame, time, vibe_callback, debug_callback):        
         processed_frame, vibe_signal = self._process_vibe_signal(frame, time, True)
         self.last_time = time
         vibe_callback(vibe_signal)
@@ -73,9 +73,9 @@ class OptiVibe:
 
     def calculate_optical_flow(self, p0, img0, img1):
         lk_params = dict(
-            winSize=(15, 15),
+            winSize=(10, 10),
             maxLevel=2,
-            criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03)
+            criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 5, 0.03)
         )
         # Calculate optical flow (forward)
         p1, st, err = cv2.calcOpticalFlowPyrLK(img0, img1, p0, None, **lk_params)
