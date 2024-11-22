@@ -21,9 +21,9 @@ OptiVibe::OptiVibe()
     */
 
     // Primary parameters
-    displacement_threshold_percentage = 0.01;
-    speed = 0.1;
-    signal_threshold = 0.2;
+    displacement_threshold_percentage = 0.015;
+    speed = 0.2;
+    signal_threshold = 0.25;
 
     // Secondary parameters
     track_len = 5;
@@ -324,16 +324,135 @@ void OptiVibe::process_signal()
 
 cv::Mat OptiVibe::annotate_frame(cv::Mat vis)
 {
+    // Add header
+    vis = add_header(vis);
+
+    // Add title and subtitle
+    vis = add_title(vis, "OhMiBod", "--Stroker AI--");
+
+    // Draw the tracks as before
     for (const auto& tr : tracks)
     {
         float x = std::get<1>(tr.back()).x;
         float y = std::get<1>(tr.back()).y;
         cv::Point2f disp = std::get<2>(tr.back());
         cv::Scalar color = assign_track_color(disp);
-        annotate_frame_with_point(vis, x, y, color);
+        // annotate_frame_with_point(vis, x, y, color);
     }
-    annotate_frame_with_signal(vis);
+
+    // Add the legend representing the vibe signal
+    vis = add_legend(vis, signal);
+
     return vis;
+}
+
+cv::Mat OptiVibe::add_header(cv::Mat image, double header_thickness, cv::Scalar header_color)
+{
+    int height = image.rows;
+    int width = image.cols;
+    int header_thickness_px = static_cast<int>(height * header_thickness);
+    cv::rectangle(image, cv::Point(0, 0), cv::Point(width, header_thickness_px), header_color, -1);
+    // Add a white border to the header
+    cv::rectangle(image, cv::Point(0, 0), cv::Point(width, header_thickness_px), cv::Scalar(255, 255, 255), 2);
+    return image;
+}
+
+cv::Mat OptiVibe::add_title(cv::Mat image, std::string title, std::string subtitle, int title_font, double title_font_scale, cv::Scalar title_color, int title_thickness, int subtitle_font, double subtitle_font_scale, cv::Scalar subtitle_color, int subtitle_thickness)
+{
+    int height = image.rows;
+    int width = image.cols;
+
+    // Calculate the position for the title
+    int baseLine = 0;
+    cv::Size title_size = cv::getTextSize(title, title_font, title_font_scale, title_thickness, &baseLine);
+    int title_x = (width - title_size.width) / 2;
+    int title_y = title_size.height + 20; // 20 pixels from the top
+
+    // Add the title to the image
+    cv::putText(image, title, cv::Point(title_x, title_y), title_font, title_font_scale, title_color, title_thickness);
+
+    // If a subtitle is provided, add it below the title
+    if (!subtitle.empty())
+    {
+        cv::Size subtitle_size = cv::getTextSize(subtitle, subtitle_font, subtitle_font_scale, subtitle_thickness, &baseLine);
+        int subtitle_x = (width - subtitle_size.width) / 2;
+        int subtitle_y = title_y + title_size.height + 10; // 10 pixels below the title
+        cv::putText(image, subtitle, cv::Point(subtitle_x, subtitle_y), subtitle_font, subtitle_font_scale, subtitle_color, subtitle_thickness);
+    }
+
+    return image;
+}
+
+cv::Mat OptiVibe::add_legend(cv::Mat image, double signal, double legend_width_scale, double legend_height_scale, cv::Scalar legend_color, cv::Scalar border_color, int border_thickness, double offset_top, double offset_right)
+{
+    int height = image.rows;
+    int width = image.cols;
+    int legend_width = static_cast<int>(width * legend_width_scale);
+    int legend_height = static_cast<int>(height * legend_height_scale);
+
+    // Calculate the top left corner position with offsets
+    int top_left_x = width - legend_width - static_cast<int>(width * offset_right);
+    int top_left_y = static_cast<int>(height * offset_top);
+
+    // Draw the legend box
+    cv::rectangle(image, cv::Point(top_left_x, top_left_y),
+                  cv::Point(top_left_x + legend_width, top_left_y + legend_height),
+                  legend_color, -1);
+
+    // Add a border to the legend box
+    cv::rectangle(image, cv::Point(top_left_x, top_left_y),
+                  cv::Point(top_left_x + legend_width, top_left_y + legend_height),
+                  border_color, border_thickness);
+
+    // Draw the shaft
+    int center_x = top_left_x + legend_width / 2;
+    int center_y = top_left_y + legend_height / 2;
+    int shaft_height_offset = legend_height / 4;
+    int shaft_width_offset = legend_width / 4;
+
+    cv::rectangle(image, cv::Point(center_x - shaft_width_offset, center_y - shaft_height_offset),
+                  cv::Point(center_x + shaft_width_offset, center_y + shaft_height_offset),
+                  cv::Scalar(0, 0, 0), -1);
+
+    // Draw circles at the top and bottom of the shaft
+    cv::circle(image, cv::Point(center_x, center_y - shaft_height_offset), shaft_width_offset, cv::Scalar(0, 0, 0), -1);
+    cv::circle(image, cv::Point(static_cast<int>(center_x + 0.75 * shaft_width_offset), center_y + shaft_height_offset), shaft_width_offset, cv::Scalar(0, 0, 0), -1);
+    cv::circle(image, cv::Point(static_cast<int>(center_x - 0.75 * shaft_width_offset), center_y + shaft_height_offset), shaft_width_offset, cv::Scalar(0, 0, 0), -1);
+
+    // Draw the ring indicator based on the signal level
+    int shaft_top_y = static_cast<int>(center_y - 0.5 * shaft_height_offset);
+    int shaft_bottom_y = static_cast<int>(center_y + 0.5 * shaft_height_offset);
+    int ring_height = static_cast<int>(0.3 * std::abs(shaft_bottom_y - shaft_top_y));
+    int ring_width = static_cast<int>(1.25 * shaft_width_offset);
+
+    // Map signal from [0,1] to position from shaft_top_y to shaft_bottom_y
+    int ring_position = static_cast<int>(-1.2*ring_height + shaft_top_y + signal * (shaft_bottom_y - shaft_top_y));
+
+    cv::rectangle(image, cv::Point(center_x - ring_width, ring_position),
+                  cv::Point(center_x + ring_width, ring_position + ring_height),
+                  cv::Scalar(255, 0, 0), -1);
+
+    // // Add text to top center of the legend
+    // std::string text = "Stroker\nSignal";
+    // int baseLine = 0;
+    // double font_scale = 1.0;
+    // int thickness = 1;
+    // cv::Size text_size = cv::getTextSize(text, cv::FONT_HERSHEY_DUPLEX, font_scale, thickness, &baseLine);
+    // int text_x = static_cast<int>(top_left_x + legend_width * 0.5 - text_size.width * 0.5);
+    // int text_y = static_cast<int>(top_left_y + legend_height * 0.05 + text_size.height);
+    // int line_spacing = 10; // Space between lines
+
+    // // Split the text into lines
+    // std::istringstream iss(text);
+    // std::string line;
+    // int line_number = 0;
+    // while (std::getline(iss, line, '\n'))
+    // {
+    //     cv::putText(image, line, cv::Point(text_x, text_y + line_number * (text_size.height + line_spacing)), cv::FONT_HERSHEY_DUPLEX, font_scale, cv::Scalar(255, 255, 255), thickness);
+    //     line_number++;
+    // }
+
+    return image;
 }
 
 cv::Scalar OptiVibe::assign_track_color(const cv::Point2f& disp)
@@ -356,38 +475,4 @@ cv::Scalar OptiVibe::assign_track_color(const cv::Point2f& disp)
 void OptiVibe::annotate_frame_with_point(cv::Mat& vis, float x, float y, const cv::Scalar& color)
 {
     cv::circle(vis, cv::Point(static_cast<int>(x), static_cast<int>(y)), 20, color, -1);
-}
-
-void OptiVibe::annotate_frame_with_signal(cv::Mat& vis)
-{
-    int height = vis.rows;
-    int width = vis.cols;
-
-    int bar_width = 100; 
-    int bar_height = static_cast<int>(height * signal);
-
-    // Adjust offsets for the bar
-    int bar_offset_x = 20; // Offset from the right side
-    int bar_offset_y = 20; // Offset from the bottom
-
-    cv::Point top_left(width - bar_width - bar_offset_x, height - bar_height - bar_offset_y);
-    cv::Point bottom_right(width - bar_offset_x, height - bar_offset_y);
-
-    // Draw the bar
-    cv::rectangle(vis, top_left, bottom_right, cv::Scalar(0, 0, 255), -1);
-
-    // Add tick marks and labels
-    int tick_height = 2;
-    int tick_positions[] = {height - bar_offset_y, static_cast<int>(height * 0.75) - bar_offset_y, static_cast<int>(height * 0.5) - bar_offset_y, static_cast<int>(height * 0.25) - bar_offset_y, 0 - bar_offset_y};
-    std::string tick_labels[] = {"0%", "25%", "50%", "75%", "100%"};
-
-    for (int i = 0; i < 5; ++i)
-    {
-        int y_pos = tick_positions[i];
-        cv::line(vis, cv::Point(width - bar_width - bar_offset_x - 5, y_pos), cv::Point(width - bar_offset_x + 5, y_pos), cv::Scalar(255, 255, 255), tick_height * 2);
-        cv::putText(vis, tick_labels[i], cv::Point(width - bar_width - bar_offset_x - 100, y_pos + 5), cv::FONT_HERSHEY_COMPLEX_SMALL, 1.5, cv::Scalar(255, 255, 255), 1);
-    }
-
-    // Add label for the bar
-    cv::putText(vis, "Vibe", cv::Point(width - bar_width - bar_offset_x - 50, height - bar_height - bar_offset_y - 10), cv::FONT_HERSHEY_COMPLEX, 1.5, cv::Scalar(255, 255, 255), 2);
 }

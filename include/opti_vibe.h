@@ -1,5 +1,3 @@
-// opti_vibe.h
-
 #ifndef OPTI_VIBE_H
 #define OPTI_VIBE_H
 
@@ -48,7 +46,11 @@ private:
     cv::Mat annotate_frame(cv::Mat vis);
     cv::Scalar assign_track_color(const cv::Point2f& disp);
     void annotate_frame_with_point(cv::Mat& vis, float x, float y, const cv::Scalar& color);
-    void annotate_frame_with_signal(cv::Mat& vis);
+
+    // New methods for annotations
+    cv::Mat add_header(cv::Mat image, double header_thickness = 0.175, cv::Scalar header_color = cv::Scalar(153, 50, 204));
+    cv::Mat add_title(cv::Mat image, std::string title, std::string subtitle = "", int title_font = cv::FONT_HERSHEY_DUPLEX, double title_font_scale = 1.5, cv::Scalar title_color = cv::Scalar(255, 255, 255), int title_thickness = 2, int subtitle_font = cv::FONT_HERSHEY_DUPLEX, double subtitle_font_scale = 1, cv::Scalar subtitle_color = cv::Scalar(255, 255, 255), int subtitle_thickness = 1);
+    cv::Mat add_legend(cv::Mat image, double signal, double legend_width_scale = 0.2, double legend_height_scale = 0.35, cv::Scalar legend_color = cv::Scalar(153, 50, 204), cv::Scalar border_color = cv::Scalar(255, 255, 255), int border_thickness = 2, double offset_top = 0.175, double offset_right = 0.0);
 };
 
 #endif // OPTI_VIBE_H

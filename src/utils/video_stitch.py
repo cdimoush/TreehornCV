@@ -17,7 +17,8 @@ def stitch_videos_ffmpeg(directory, output_filename):
             file_list.write(f"file '{os.path.join(directory, video)}'\n")
     
     # Use ffmpeg to concatenate the videos
-    ffmpeg.input('file_list.txt', format='concat', safe=0).output(output_filename, c='copy').run()
+    output_path = os.path.join(directory, output_filename)
+    ffmpeg.input('file_list.txt', format='concat', safe=0).output(output_path, c='copy').run()
 
     # Clean up the temporary file list
     os.remove('file_list.txt')
