@@ -21,7 +21,6 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-
     cv::VideoCapture cap;
 
     // Open video source
@@ -53,9 +52,9 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    // Define the vibe_callback and debug_callback using std::function
-    vibe_callback_t vibe_callback = [](double vibe_intensity) {
-        std::cout << "Vibe Intensity: " << vibe_intensity << std::endl;
+    // Define the stroker and debug_callback using std::function
+    stroker_callback_t stroker_callback = [](double vibe_intensity, double second_param) {
+        std::cout << "Vibe Intensity: " << vibe_intensity << ", Second Param: " << second_param << std::endl;
     };
 
     debug_callback_t debug_callback = [](const cv::Mat& annotated_frame) {
@@ -76,8 +75,8 @@ int main(int argc, char** argv) {
         // Reset processed_frame before processing
         processed_frame.release();
 
-        // Call the process_frame_debug method
-        optiVibe.process_frame_debug(frame, time, vibe_callback, debug_callback);
+        // Call the new process method
+        optiVibe.process_frame_stroker_debug(frame, time, stroker_callback, debug_callback);
 
         // Write the processed frame to the output video
         if (!processed_frame.empty()) {

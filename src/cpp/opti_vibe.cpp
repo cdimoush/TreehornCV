@@ -11,9 +11,9 @@ OptiVibe::OptiVibe()
     - The vibe signal is determined by evaluating a set of trackers in a rolling buffer
 
     Primary parameters:
-    - displacement_threshold_percentage: Percentage of frame height that a tracker's displacement must exceed to be considered significant
-    - speed: Amount that the vibe signal changes between frames. 1.0 is the maximum change
-    - signal_threshold: The avg value of trackers must exceed this value (positive or negative) to update the vibe signal
+    - disp_percentage: Percentage of frame height that a tracker's displacement must exceed to be considered significant
+    - disp_threshold: The avg value of trackers must exceed this value (positive or negative) to update the vibe signal
+    - acc: Amount that the vibe signal changes between frames. 1.0 is the maximum change
 
     Secondary parameters:
     - track_len: Number of frames to track a feature
@@ -21,9 +21,10 @@ OptiVibe::OptiVibe()
     */
 
     // Primary parameters
-    displacement_threshold_percentage = 0.01;
-    speed = 0.1;
-    signal_threshold = 0.2;
+    disp_percentage = 0.01;
+    disp_threshold = 0.2;
+    acc = 0.075;
+    max_vel = 1.0;
 
     // Secondary parameters
     track_len = 5;
@@ -32,7 +33,9 @@ OptiVibe::OptiVibe()
     // State variables
     next_id = 0;
     frame_idx = 0;
-    signal = 0.0;
+    signal_target = 0.0;
+    signal_pos = 0.0;
+    signal_vel = 0.0;
     last_time = 0.0;
 }
 
@@ -41,22 +44,37 @@ OptiVibe::~OptiVibe()
     // No dynamic memory to release
 }
 
-void OptiVibe::process_frame(const cv::Mat& frame, double time, vibe_callback_t vibe_callback)
+void OptiVibe::process_frame_vibe(const cv::Mat& frame, double time, vibe_callback_t vibe_callback)
 {
-    auto [processed_frame, vibe_signal] = compute_vibe_signal(frame, time, false);
+    auto [processed_frame, target, pos, vel] = compute_signal(frame, time, false);
     last_time = time;
-    vibe_callback(vibe_signal);
+    vibe_callback(pos);
 }
 
-void OptiVibe::process_frame_debug(const cv::Mat& frame, double time, vibe_callback_t vibe_callback, debug_callback_t debug_callback)
+void OptiVibe::process_frame_vibe_debug(const cv::Mat& frame, double time, vibe_callback_t vibe_callback, debug_callback_t debug_callback)
 {
-    auto [processed_frame, vibe_signal] = compute_vibe_signal(frame, time, true);
+    auto [processed_frame, target, pos, vel] = compute_signal(frame, time, true);
     last_time = time;
-    vibe_callback(vibe_signal);
+    vibe_callback(pos);
     debug_callback(processed_frame);
 }
 
-std::pair<cv::Mat, double> OptiVibe::compute_vibe_signal(const cv::Mat& frame, double time, bool debug)
+void OptiVibe::process_frame_stroker(const cv::Mat& frame, double time, stroker_callback_t stroker_callback)
+{
+    auto [processed_frame, target, pos, vel] = compute_signal(frame, time, false);
+    last_time = time;
+    stroker_callback(target, vel);
+}
+
+void OptiVibe::process_frame_stroker_debug(const cv::Mat& frame, double time, stroker_callback_t stroker_callback, debug_callback_t debug_callback)
+{
+    auto [processed_frame, target, pos, vel] = compute_signal(frame, time, true);
+    last_time = time;
+    stroker_callback(target, vel);
+    debug_callback(processed_frame);
+}
+
+std::tuple<cv::Mat, double, double, double> OptiVibe::compute_signal(const cv::Mat& frame, double time, bool debug)
 {
     cv::Mat frame_gray = convert_to_grayscale(frame, true, true);
     cv::Mat processed_frame;
@@ -88,7 +106,7 @@ std::pair<cv::Mat, double> OptiVibe::compute_vibe_signal(const cv::Mat& frame, d
     frame_idx += 1;
     prev_gray = frame_gray;
 
-    return std::make_pair(processed_frame, signal);
+    return std::make_tuple(processed_frame, signal_target, signal_pos, signal_vel);
 }
 
 cv::Mat OptiVibe::convert_to_grayscale(const cv::Mat& frame, bool invert, bool sharpen)
@@ -211,8 +229,8 @@ void OptiVibe::process_displacement(const cv::Mat& frame)
     int frame_height = frame.rows;
     int frame_width = frame.cols;
 
-    double x_threshold = frame_width * displacement_threshold_percentage;
-    double y_threshold = frame_height * displacement_threshold_percentage;
+    double x_threshold = frame_width * disp_percentage;
+    double y_threshold = frame_height * disp_percentage;
 
     for (auto& tr : tracks)
     {
@@ -308,30 +326,36 @@ void OptiVibe::process_signal()
 
     double average_y_disp = (count == 0) ? 0.0 : total_y_disp / count;
 
-    // Update the signal based on the average y-displacement and signal threshold
-    if (std::abs(average_y_disp) > signal_threshold)
+    // Handle sign
+    double new_target = (average_y_disp > 0) ? 1.0 : 0.0;
+    if (new_target != signal_target)
     {
-        if (average_y_disp > 0)
-        {
-            signal = std::min(signal + speed, 1.0);
-        }
-        else
-        {
-            signal = std::max(signal - speed, 0.0);
-        }
+        signal_vel = 0.0; // Reset velocity on sign flip
+    }
+
+    // Update signal
+    signal_target = new_target;
+    signal_vel = std::min(signal_vel + acc, max_vel);
+    if (signal_target == 1.0)
+    {
+        signal_pos = std::min(signal_pos + signal_vel, 1.0);
+    }
+    else
+    {
+        signal_pos = std::max(signal_pos - signal_vel, 0.0);
     }
 }
 
 cv::Mat OptiVibe::annotate_frame(cv::Mat vis)
 {
-    for (const auto& tr : tracks)
-    {
-        float x = std::get<1>(tr.back()).x;
-        float y = std::get<1>(tr.back()).y;
-        cv::Point2f disp = std::get<2>(tr.back());
-        cv::Scalar color = assign_track_color(disp);
-        annotate_frame_with_point(vis, x, y, color);
-    }
+    // for (const auto& tr : tracks)
+    // {
+    //     float x = std::get<1>(tr.back()).x;
+    //     float y = std::get<1>(tr.back()).y;
+    //     cv::Point2f disp = std::get<2>(tr.back());
+    //     cv::Scalar color = assign_track_color(disp);
+    //     annotate_frame_with_point(vis, x, y, color);
+    // }
     annotate_frame_with_signal(vis);
     return vis;
 }
@@ -363,31 +387,65 @@ void OptiVibe::annotate_frame_with_signal(cv::Mat& vis)
     int height = vis.rows;
     int width = vis.cols;
 
-    int bar_width = 100; 
-    int bar_height = static_cast<int>(height * signal);
+    // Define percentages for dimensions and offsets
+    double bar_width_pct = 0.1;
+    double bar_height_pct = 0.8;
+    double offset_right_pct = 0.02;
 
-    // Adjust offsets for the bar
-    int bar_offset_x = 20; // Offset from the right side
-    int bar_offset_y = 20; // Offset from the bottom
+    // Calculate bar dimensions and positions
+    int bar_width = static_cast<int>(width * bar_width_pct);
+    int bar_height = static_cast<int>(height * bar_height_pct);
+    int offset_right = static_cast<int>(width * offset_right_pct);
+    int offset_top = (height - bar_height) / 2;
 
-    cv::Point top_left(width - bar_width - bar_offset_x, height - bar_height - bar_offset_y);
-    cv::Point bottom_right(width - bar_offset_x, height - bar_offset_y);
+    int x1 = width - offset_right - bar_width;
+    int y1 = offset_top;
+    int x2 = width - offset_right;
+    int y2 = y1 + bar_height;
 
-    // Draw the bar
-    cv::rectangle(vis, top_left, bottom_right, cv::Scalar(0, 0, 255), -1);
+    cv::Point top_left(x1, y1);
+    cv::Point bottom_right(x2, y2);
 
-    // Add tick marks and labels
-    int tick_height = 2;
-    int tick_positions[] = {height - bar_offset_y, static_cast<int>(height * 0.75) - bar_offset_y, static_cast<int>(height * 0.5) - bar_offset_y, static_cast<int>(height * 0.25) - bar_offset_y, 0 - bar_offset_y};
-    std::string tick_labels[] = {"0%", "25%", "50%", "75%", "100%"};
+    // Draw the blue bar
+    cv::rectangle(vis, top_left, bottom_right, cv::Scalar(255, 0, 0), -1); // Blue color in BGR
 
-    for (int i = 0; i < 5; ++i)
-    {
-        int y_pos = tick_positions[i];
-        cv::line(vis, cv::Point(width - bar_width - bar_offset_x - 5, y_pos), cv::Point(width - bar_offset_x + 5, y_pos), cv::Scalar(255, 255, 255), tick_height * 2);
-        cv::putText(vis, tick_labels[i], cv::Point(width - bar_width - bar_offset_x - 100, y_pos + 5), cv::FONT_HERSHEY_COMPLEX_SMALL, 1.5, cv::Scalar(255, 255, 255), 1);
-    }
+    // Clamp signal values between 0 and 1
+    double signal_target_clamped = std::max(0.0, std::min(signal_target, 1.0));
+    double signal_pos_clamped = std::max(0.0, std::min(signal_pos, 1.0));
+    double signal_vel_clamped = std::max(0.0, std::min(signal_vel, 1.0));
 
-    // Add label for the bar
-    cv::putText(vis, "Vibe", cv::Point(width - bar_width - bar_offset_x - 50, height - bar_height - bar_offset_y - 10), cv::FONT_HERSHEY_COMPLEX, 1.5, cv::Scalar(255, 255, 255), 2);
+    // Calculate positions for signal_target and signal_pos
+    int target_y = y1 + static_cast<int>(signal_target_clamped * bar_height);
+    int pos_y = y1 + static_cast<int>(signal_pos_clamped * bar_height);
+
+    // Draw the signal_target line
+    cv::line(vis, cv::Point(x1, target_y), cv::Point(x2, target_y), cv::Scalar(255, 255, 255), 15); // White line
+
+    // Define slider ring dimensions (small rectangle)
+    int slider_height = static_cast<int>(bar_height * 0.1);
+    int x1_slider = x1 - 0.1 * bar_width;
+    int x2_slider = x2 + 0.1 * bar_width;
+
+    int slider_y1 = pos_y - slider_height / 2;
+    int slider_y2 = pos_y + slider_height / 2;
+
+    // Ensure the slider stays within the bar
+    slider_y1 = std::max(y1, slider_y1);
+    slider_y2 = std::min(y2, slider_y2);
+
+    cv::Point slider_top_left(x1_slider, slider_y1);
+    cv::Point slider_bottom_right(x2_slider, slider_y2);
+
+    // Compute the color of the slider ring based on signal_vel (0 = green, 1 = red)
+    // Linearly interpolate between green and red
+    int red = static_cast<int>(255 * signal_vel_clamped);
+    int green = static_cast<int>(255 * (1.0 - signal_vel_clamped));
+    int blue = 0;
+
+    // Ensure the values are within [0, 255]
+    red = std::min(255, std::max(0, red));
+    green = std::min(255, std::max(0, green));
+
+    cv::Scalar slider_color(blue, green, red); // BGR format
+    cv::rectangle(vis, slider_top_left, slider_bottom_right, slider_color, -1);
 }
