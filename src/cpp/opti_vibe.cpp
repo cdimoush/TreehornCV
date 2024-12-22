@@ -145,7 +145,22 @@ void OptiVibe::process_existing_tracks(const cv::Mat& frame_gray)
         p0.push_back(std::get<1>(tr.back()));
     }
 
-    cv::Mat p0_mat(p0);
+    cv::Mat p0_mat;
+    /* 
+    ERROR HANDLING BLOCK FOR IOS CRASH BUG
+    ERROR HANDLING BLOCK FOR IOS CRASH BUG
+    ERROR HANDLING BLOCK FOR IOS CRASH BUG
+    */
+    if (!p0.empty())
+    {
+        // Create a CV_32FC2 Mat referencing p0's data, then clone it
+        p0_mat = cv::Mat(static_cast<int>(p0.size()), 1, CV_32FC2, p0.data()).clone();
+    }
+    else
+    {
+        p0_mat = cv::Mat(); // empty matrix if no points
+    }
+
     cv::Mat p1;
     std::vector<uchar> good;
 
@@ -193,7 +208,23 @@ std::pair<cv::Mat, std::vector<uchar>> OptiVibe::calculate_optical_flow(const cv
         good.push_back(d[i] < 1);
     }
 
-    cv::Mat p1_mat(p1_vec);
+    cv::Mat p1_mat;
+    /* 
+    ERROR HANDLING BLOCK FOR IOS CRASH BUG
+    ERROR HANDLING BLOCK FOR IOS CRASH BUG
+    ERROR HANDLING BLOCK FOR IOS CRASH BUG
+    */
+    if (!p1_vec.empty())
+    {
+        // Create a CV_32FC2 Mat referencing p1_vec, then clone it
+        p1_mat = cv::Mat(static_cast<int>(p1_vec.size()), 1, CV_32FC2, p1_vec.data()).clone();
+    }
+    else
+    {
+        // Empty mat if vector is empty
+        p1_mat = cv::Mat();
+    }
+
     return std::make_pair(p1_mat, good);
 }
 
@@ -307,6 +338,22 @@ cv::Mat OptiVibe::create_feature_mask(const cv::Mat& frame_gray)
 
 void OptiVibe::process_signal()
 {
+    /**
+     * Processes the current signal based on the displacement of tracked features.
+     *
+     * This method calculates the average vertical displacement (y-displacement) of all
+     * tracked features. If the average displacement is non-zero, it updates the target
+     * signal value. The signal velocity is adjusted based on the acceleration parameter,
+     * and the signal position is updated accordingly.
+     *
+     * - If the average y-displacement is positive, the target signal is set to 1.0.
+     * - If the average y-displacement is zero or negative, the target signal is set to 0.0.
+     * - The signal velocity is reset to zero if the target signal changes.
+     * - The signal position is incremented or decremented based on the signal velocity
+     *   and the current target signal.
+     *
+     * This method ensures that the signal position is clamped between 0.0 and 1.0.
+     */
     if (tracks.empty())
         return;
 
@@ -325,6 +372,8 @@ void OptiVibe::process_signal()
     }
 
     double average_y_disp = (count == 0) ? 0.0 : total_y_disp / count;
+
+    y_displacements.push_back(average_y_disp);
 
     // Handle sign
     double new_target = (average_y_disp > 0) ? 1.0 : 0.0;

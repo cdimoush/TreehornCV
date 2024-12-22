@@ -1,8 +1,10 @@
 // test.cpp
 
 #include <iostream>
+#include <fstream>
 #include <opencv2/opencv.hpp> // Include OpenCV headers
 #include "opti_vibe.h"
+
 
 // Global variable to store the processed frame
 cv::Mat processed_frame;
@@ -52,9 +54,17 @@ int main(int argc, char** argv) {
         return -1;
     }
 
+    // Open a CSV file to write target and velocity values
+    std::ofstream csvFile("../_dev/target_velocity.csv");
+    if (!csvFile.is_open()) {
+        std::cerr << "Error: Could not open CSV file for writing." << std::endl;
+        return -1;
+    }
+    csvFile << "Target,Velocity\n"; // Write CSV header
+
     // Define the stroker and debug_callback using std::function
-    stroker_callback_t stroker_callback = [](double vibe_intensity, double second_param) {
-        std::cout << "Vibe Intensity: " << vibe_intensity << ", Second Param: " << second_param << std::endl;
+    stroker_callback_t stroker_callback = [&csvFile](double target, double vel) {
+        csvFile << target << "," << vel << "\n"; // Write target and velocity to CSV
     };
 
     debug_callback_t debug_callback = [](const cv::Mat& annotated_frame) {
@@ -92,6 +102,9 @@ int main(int argc, char** argv) {
 
     cap.release();
     outputVideo.release();
+
+    // Close the CSV file
+    csvFile.close();
 
     std::cout << "Done" << std::endl;
     return 0;
