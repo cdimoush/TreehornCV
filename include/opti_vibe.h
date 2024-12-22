@@ -28,14 +28,14 @@ private:
     std::vector<std::vector<std::tuple<int, cv::Point2f, cv::Point2f>>> tracks;
     int frame_idx;
     int next_id;
-    double disp_percentage;
     double disp_threshold;
-    double acc;
+    double disp_cutoff;
     double max_vel;
     cv::Mat prev_gray;
     double signal_target;
     double signal_pos;
     double signal_vel;
+    std::vector<double> signed_signal_vel_history;
     double last_time;
 
     // Private methods
@@ -46,7 +46,7 @@ private:
     std::pair<cv::Mat, std::vector<uchar>> calculate_optical_flow(const cv::Mat& p0, const cv::Mat& img0, const cv::Mat& img1);
     void update_tracks(const cv::Mat& p1, const std::vector<uchar>& good);
     void process_displacement(const cv::Mat& frame);
-    std::pair<int, int> calculate_displacement(const std::vector<std::tuple<int, cv::Point2f, cv::Point2f>>& track, double x_threshold, double y_threshold);
+    std::pair<float, float> calculate_displacement(const std::vector<std::tuple<int, cv::Point2f, cv::Point2f>>& track, double x_threshold, double y_threshold, double x_cutoff, double y_cutoff);
     bool should_detect_new_features();
     void detect_new_features(const cv::Mat& frame_gray);
     cv::Mat create_feature_mask(const cv::Mat& frame_gray);

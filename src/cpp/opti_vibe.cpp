@@ -11,9 +11,12 @@ OptiVibe::OptiVibe()
     - The vibe signal is determined by evaluating a set of trackers in a rolling buffer
 
     Primary parameters:
-    - disp_percentage: Percentage of frame height that a tracker's displacement must exceed to be considered significant
-    - disp_threshold: The avg value of trackers must exceed this value (positive or negative) to update the vibe signal
-    - acc: Amount that the vibe signal changes between frames. 1.0 is the maximum change
+    - disp_threshold: Minimum tracker displacement to be considered significant
+        - % of frame size
+        - Associated with minimum velocity (0.0)
+    - disp_cutoff: Maximum tracker displacement to be considered significant
+        - % of frame size
+        - Associated with maximum velocity
 
     Secondary parameters:
     - track_len: Number of frames to track a feature
@@ -21,10 +24,9 @@ OptiVibe::OptiVibe()
     */
 
     // Primary parameters
-    disp_percentage = 0.01;
-    disp_threshold = 0.2;
-    acc = 0.075;
-    max_vel = 1.0;
+    disp_threshold = 0.005;
+    disp_cutoff = 0.025;
+    max_vel = 0.25;
 
     // Secondary parameters
     track_len = 5;
@@ -36,6 +38,7 @@ OptiVibe::OptiVibe()
     signal_target = 0.0;
     signal_pos = 0.0;
     signal_vel = 0.0;
+    signed_signal_vel_history = std::vector<double>(1, 0.0);
     last_time = 0.0;
 }
 
@@ -260,25 +263,28 @@ void OptiVibe::process_displacement(const cv::Mat& frame)
     int frame_height = frame.rows;
     int frame_width = frame.cols;
 
-    double x_threshold = frame_width * disp_percentage;
-    double y_threshold = frame_height * disp_percentage;
+    double x_threshold = frame_width * disp_threshold;
+    double y_threshold = frame_height * disp_threshold;
+
+    double x_cutoff = frame_width * disp_cutoff;
+    double y_cutoff = frame_height * disp_cutoff;
 
     for (auto& tr : tracks)
     {
-        auto [x_disp, y_disp] = calculate_displacement(tr, x_threshold, y_threshold);
+        auto [x_disp, y_disp] = calculate_displacement(tr, x_threshold, y_threshold, x_cutoff, y_cutoff);
         // Store displacement in the track
         if (std::get<2>(tr.back()) == cv::Point2f(0.0f, 0.0f))
         {
             // Update the last point in the track with displacement
-            std::get<2>(tr.back()) = cv::Point2f(static_cast<float>(x_disp), static_cast<float>(y_disp));
+            std::get<2>(tr.back()) = cv::Point2f(x_disp, y_disp);
         }
     }
 }
 
-std::pair<int, int> OptiVibe::calculate_displacement(const std::vector<std::tuple<int, cv::Point2f, cv::Point2f>>& track, double x_threshold, double y_threshold)
+std::pair<float, float> OptiVibe::calculate_displacement(const std::vector<std::tuple<int, cv::Point2f, cv::Point2f>>& track, double x_threshold, double y_threshold, double x_cutoff, double y_cutoff)
 {
     if (track.size() < 2)
-        return std::make_pair(0, 0);
+        return std::make_pair(0.0f, 0.0f);
 
     double total_x_disp = 0.0;
     double total_y_disp = 0.0;
@@ -289,8 +295,17 @@ std::pair<int, int> OptiVibe::calculate_displacement(const std::vector<std::tupl
         total_y_disp += std::get<1>(track[i]).y - std::get<1>(track[i - 1]).y;
     }
 
-    int x_disp = (total_x_disp > x_threshold) ? 1 : (total_x_disp < -x_threshold) ? -1 : 0;
-    int y_disp = (total_y_disp > y_threshold) ? 1 : (total_y_disp < -y_threshold) ? -1 : 0;
+    // Apply Threshold
+    float x_disp = (std::abs(total_x_disp) > x_threshold) ? total_x_disp : 0.0f;
+    float y_disp = (std::abs(total_y_disp) > y_threshold) ? total_y_disp : 0.0f;
+
+    // Apply Cutoff
+    x_disp = (std::abs(x_disp) > x_cutoff) ? (x_disp > 0 ? x_cutoff : -x_cutoff) : x_disp;
+    y_disp = (std::abs(y_disp) > y_cutoff) ? (y_disp > 0 ? y_cutoff : -y_cutoff) : y_disp;
+
+    // Normalize
+    x_disp = (x_disp - (x_disp > 0 ? x_threshold : -x_threshold)) / (x_cutoff - x_threshold);
+    y_disp = (y_disp - (y_disp > 0 ? y_threshold : -y_threshold)) / (y_cutoff - y_threshold);
 
     return std::make_pair(x_disp, y_disp);
 }
@@ -342,17 +357,11 @@ void OptiVibe::process_signal()
      * Processes the current signal based on the displacement of tracked features.
      *
      * This method calculates the average vertical displacement (y-displacement) of all
-     * tracked features. If the average displacement is non-zero, it updates the target
-     * signal value. The signal velocity is adjusted based on the acceleration parameter,
-     * and the signal position is updated accordingly.
-     *
-     * - If the average y-displacement is positive, the target signal is set to 1.0.
-     * - If the average y-displacement is zero or negative, the target signal is set to 0.0.
-     * - The signal velocity is reset to zero if the target signal changes.
-     * - The signal position is incremented or decremented based on the signal velocity
-     *   and the current target signal.
-     *
-     * This method ensures that the signal position is clamped between 0.0 and 1.0.
+     * tracked features. This diplacement value is considerd to be synonymous with the
+     * velocity (as it is calculated with optical flow). The sign of the velocity is used
+     * to determine the target signal (1.0 for moving down, 0.0 for moving up). The signal
+     * velocity is will be an abs term. The signal position is the velocity term added to 
+     * the previous signal position.
      */
     if (tracks.empty())
         return;
@@ -373,26 +382,28 @@ void OptiVibe::process_signal()
 
     double average_y_disp = (count == 0) ? 0.0 : total_y_disp / count;
 
-    y_displacements.push_back(average_y_disp);
+    // Add to history
+    signed_signal_vel_history.push_back(average_y_disp);
+    if (signed_signal_vel_history.size() > track_len)
+    {
+        signed_signal_vel_history.erase(signed_signal_vel_history.begin());
+    }
+
+    // Compute rolling average of history
+    double rolling_avg = 0.0;
+    for (const auto& vel : signed_signal_vel_history)
+    {
+        rolling_avg += vel;
+    }
+    rolling_avg /= signed_signal_vel_history.size();
 
     // Handle sign
-    double new_target = (average_y_disp > 0) ? 1.0 : 0.0;
-    if (new_target != signal_target)
-    {
-        signal_vel = 0.0; // Reset velocity on sign flip
-    }
-
-    // Update signal
-    signal_target = new_target;
-    signal_vel = std::min(signal_vel + acc, max_vel);
-    if (signal_target == 1.0)
-    {
-        signal_pos = std::min(signal_pos + signal_vel, 1.0);
-    }
-    else
-    {
-        signal_pos = std::max(signal_pos - signal_vel, 0.0);
-    }
+    signal_target = (rolling_avg > 0) ? 1.0 : 0.0;
+    signal_vel = max_vel * std::abs(rolling_avg);
+    signal_pos = signal_pos + max_vel * rolling_avg;
+    signal_pos = std::min(signal_pos, 1.0);
+    signal_pos = std::max(signal_pos, 0.0);
+    std::cout << "Signal Position: " << signal_pos << std::endl;
 }
 
 cv::Mat OptiVibe::annotate_frame(cv::Mat vis)
