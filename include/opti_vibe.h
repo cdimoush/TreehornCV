@@ -3,7 +3,8 @@
 #ifndef OPTI_VIBE_H
 #define OPTI_VIBE_H
 
-#include <opencv2/opencv.hpp>
+// #include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
 #include <functional>
 
 // Define the callback function types
@@ -20,6 +21,8 @@ public:
     void process_frame_vibe_debug(const cv::Mat& frame, double time, vibe_callback_t vibe_callback, debug_callback_t debug_callback);
     void process_frame_stroker(const cv::Mat& frame, double time, stroker_callback_t stroker_callback);
     void process_frame_stroker_debug(const cv::Mat& frame, double time, stroker_callback_t stroker_callback, debug_callback_t debug_callback);
+    void set_displacement_params(double threshold, double cutoff);
+    void set_max_velocity(double velocity);
 
 private:
     // Private member variables

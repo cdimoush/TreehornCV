@@ -14,10 +14,14 @@ int main(int argc, char** argv) {
 
     std::string video_src;
     std::string output_path;
+    int stride = 1;
 
     if (argc > 1) {
         video_src = "/workspaces/TreehornCV/_video/" + std::string(argv[1]);
         output_path = "/workspaces/TreehornCV/_video/processed_" + std::string(argv[1]);
+        if (argc > 2) {
+            stride = std::stod(argv[2]); // Second argument is for how many frames to drop, or stride
+        }
     } else {
         std::cerr << "Error: No input file provided." << std::endl;
         return -1;
@@ -54,22 +58,25 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    // Open a CSV file to write target and velocity values
+    // Open a CSV file to write target, velocity, and timestamp values
     std::ofstream csvFile("../_dev/target_velocity.csv");
     if (!csvFile.is_open()) {
         std::cerr << "Error: Could not open CSV file for writing." << std::endl;
         return -1;
     }
-    csvFile << "Target,Velocity\n"; // Write CSV header
+    csvFile << "Timestamp,Target,Velocity\n"; // Write CSV header
 
     // Define the stroker and debug_callback using std::function
-    stroker_callback_t stroker_callback = [&csvFile](double target, double vel) {
-        csvFile << target << "," << vel << "\n"; // Write target and velocity to CSV
+    stroker_callback_t stroker_callback = [&csvFile, &cap](double target, double vel) {
+        double timestamp = cap.get(cv::CAP_PROP_POS_MSEC) / 1000.0; // Get timestamp in seconds
+        csvFile << timestamp << "," << target << "," << vel << "\n"; // Write timestamp, target, and velocity to CSV
     };
 
     debug_callback_t debug_callback = [](const cv::Mat& annotated_frame) {
         processed_frame = annotated_frame.clone();
     };
+
+    int stride_count = 0;
 
     while (true) {
         cv::Mat frame;
@@ -80,13 +87,21 @@ int main(int argc, char** argv) {
         }
 
         // Get the current time in seconds
-        double time = static_cast<double>(cv::getTickCount()) / cv::getTickFrequency();
+        double current_time = static_cast<double>(cv::getTickCount()) / cv::getTickFrequency();
+
+        // Increment stride_count for each frame read
+        stride_count++;
+
+        // Stride: Process only when stride_count is a multiple of stride
+        if (stride > 0 && stride_count % stride != 0) {
+            continue;
+        }
 
         // Reset processed_frame before processing
         processed_frame.release();
 
         // Call the new process method
-        optiVibe.process_frame_stroker_debug(frame, time, stroker_callback, debug_callback);
+        optiVibe.process_frame_stroker_debug(frame, current_time, stroker_callback, debug_callback);
 
         // Write the processed frame to the output video
         if (!processed_frame.empty()) {

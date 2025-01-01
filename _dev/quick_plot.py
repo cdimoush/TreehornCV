@@ -5,13 +5,13 @@ def plot_target_velocity(csv_file_path):
     # Read the CSV file
     data = pd.read_csv(csv_file_path)
 
-    # Plot the data
+    # Plot the data using Timestamp as the x-axis
     plt.figure(figsize=(10, 6))
-    plt.plot(data['Target'], label='Target', color='b')
-    plt.plot(data['Velocity'], label='Velocity', color='r')
+    plt.plot(data['Timestamp'], data['Target'], label='Target', color='b')
+    plt.plot(data['Timestamp'], data['Velocity'], label='Velocity', color='r')
 
     # Add labels and title
-    plt.xlabel('Frame Index')
+    plt.xlabel('Timestamp (s)')
     plt.ylabel('Value')
     plt.title('Target and Velocity over Time')
     plt.legend()

@@ -1,6 +1,7 @@
 // opti_vibe.cpp
 
 #include "opti_vibe.h"
+#include <opencv2/opencv.hpp>
 #include <cmath>
 
 OptiVibe::OptiVibe()
@@ -11,26 +12,35 @@ OptiVibe::OptiVibe()
     - The vibe signal is determined by evaluating a set of trackers in a rolling buffer
 
     Primary parameters:
+    - THESE PARAMETERS ARE IMPORTANT AND HAVE TO BE SET CORRECTLY TO WORK WITH STROKER AND VIDEO
     - disp_threshold: Minimum tracker displacement to be considered significant
         - % of frame size
         - Associated with minimum velocity (0.0)
+        - IF SROKER ISN'T MOVING LOWER THIS VALUE
     - disp_cutoff: Maximum tracker displacement to be considered significant
         - % of frame size
         - Associated with maximum velocity
+        - IF SROKER IS MOVING SLOWLY, INCREASE THIS VALUE
+    - max_vel: Maximum velocity signal to command
+        - 0.0 - 1.0
+        - This limits the maximum velocity that can be commanded it is a scalar
+        - IF SROKER IS MOVING SLOWLY, INCREASE THIS VALUE
 
     Secondary parameters:
     - track_len: Number of frames to track a feature
+        - Use for tracking if motion is significant
+        - Used for moving average filtering
     - detect_interval: Number of frames between feature detection refreshes
     */
 
     // Primary parameters
-    disp_threshold = 0.005;
-    disp_cutoff = 0.025;
-    max_vel = 0.25;
+    disp_threshold = 0.001;
+    disp_cutoff = 0.005;
+    max_vel = 0.9;
 
     // Secondary parameters
-    track_len = 5;
-    detect_interval = 5;
+    track_len = 3;
+    detect_interval = 15;
 
     // State variables
     next_id = 0;
@@ -40,6 +50,28 @@ OptiVibe::OptiVibe()
     signal_vel = 0.0;
     signed_signal_vel_history = std::vector<double>(1, 0.0);
     last_time = 0.0;
+
+    // Parameter check
+    if (disp_threshold > disp_cutoff)
+    {
+        std::cerr << "Error: disp_threshold must be less than disp_cutoff" << std::endl;
+        exit(1);
+    }
+    if (max_vel > 1.0 || max_vel < 0.0)
+    {
+        std::cerr << "Error: max_vel must be between 0.0 and 1.0" << std::endl;
+        exit(1);
+    }
+    if (track_len < 1)
+    {
+        std::cerr << "Error: track_len must be greater than 0" << std::endl;
+        exit(1);
+    }
+    if (track_len > detect_interval)
+    {
+        std::cerr << "Error: track_len must be less than detect_interval" << std::endl;
+        exit(1);
+    }
 }
 
 OptiVibe::~OptiVibe()
@@ -508,4 +540,21 @@ void OptiVibe::annotate_frame_with_signal(cv::Mat& vis)
 
     cv::Scalar slider_color(blue, green, red); // BGR format
     cv::rectangle(vis, slider_top_left, slider_bottom_right, slider_color, -1);
+}
+
+void OptiVibe::set_displacement_params(double threshold, double cutoff) {
+    if (threshold > cutoff) {
+        std::cerr << "Error: disp_threshold must be less than disp_cutoff" << std::endl;
+        return;
+    }
+    disp_threshold = threshold;
+    disp_cutoff = cutoff;
+}
+
+void OptiVibe::set_max_velocity(double velocity) {
+    if (velocity > 1.0 || velocity < 0.0) {
+        std::cerr << "Error: max_vel must be between 0.0 and 1.0" << std::endl;
+        return;
+    }
+    max_vel = velocity;
 }
